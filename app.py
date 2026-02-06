@@ -681,6 +681,15 @@ def main():
     with col2:
         st.header("📊 Controls")
         
+        # --- TAMBAHAN: Agar Stream Key Terlihat / Bisa Diisi Manual ---
+        current_k = st.session_state.get('current_stream_key', '')
+        stream_key_input = st.text_input("🔑 Stream Key", value=current_k, type="password", help="Otomatis terisi jika klik tombol di kiri, atau paste manual dari YouTube Studio.")
+        
+        # Simpan ke memori jika user mengubah isinya
+        if stream_key_input:
+            st.session_state['current_stream_key'] = stream_key_input
+        # -------------------------------------------------------------
+
         streaming = st.session_state.get('streaming', False)
         if streaming:
             st.error("🔴 LIVE")
