@@ -334,49 +334,63 @@ def get_broadcast_stream_key(service, broadcast_id):
         return None
     except: return None
 
-# --- OPTIMIZED FFMPEG (Agar tidak loading terus) ---
+# --- OPTIMIZED FFMPEG (FIX LOADING SCREEN) ---
 def run_ffmpeg(video_path, stream_key, is_shorts, log_callback, rtmp_url=None, session_id=None):
     output_url = rtmp_url or f"rtmp://a.rtmp.youtube.com/live2/{stream_key}"
     
-    # Pengaturan ULTRAFAST dan 720p agar CPU server tidak jebol
     cmd = [
-        "ffmpeg", "-re", "-stream_loop", "-1", "-i", video_path,
-        "-c:v", "libx264", 
-        "-preset", "ultrafast",  # KUNCI 1: Super ringan
-        "-tune", "zerolatency",  # KUNCI 2: Low latency
-        "-b:v", "2000k",         # Bitrate aman
-        "-maxrate", "2500k", 
-        "-bufsize", "5000k",
-        "-g", "60",              # Wajib buat YouTube
-        "-keyint_min", "60",
-        "-c:a", "aac", 
-        "-b:a", "128k", 
-        "-ar", "44100",
-        "-f", "flv"
+        "ffmpeg", 
+        "-re", 
+        "-stream_loop", "-1",  # Loop selamanya
+        "-i", video_path,      # Input file
+        
+        # --- VIDEO SETTINGS ---
+        "-c:v", "libx264",     # Codec Video
+        "-preset", "ultrafast",# Prioritas kecepatan (biar CPU gak jebol)
+        "-tune", "zerolatency",# Kurangi delay
+        "-pix_fmt", "yuv420p", # <--- WAJIB! Agar YouTube bisa baca gambarnya
+        "-r", "30",            # Paksa 30 FPS stabil
+        "-g", "60",            # Keyframe tiap 2 detik (Wajib YouTube: 2 * 30fps = 60)
+        "-b:v", "2000k",       # Bitrate 2000kbps (Cukup untuk 720p)
+        "-maxrate", "2500k",   # Batas atas bitrate
+        "-bufsize", "5000k",   # Buffer size
+        
+        # --- AUDIO SETTINGS ---
+        "-c:a", "aac",         # Codec Audio
+        "-b:a", "128k",        # Bitrate Audio
+        "-ar", "44100",        # Sample Rate Standar
+        
+        # --- FORMAT OUTPUT ---
+        "-f", "flv",           # Format FLV untuk RTMP
     ]
     
+    # Skala Resolusi (Downscale ke 720p biar server kuat)
     if is_shorts:
+         # Mode Shorts (Vertikal)
          cmd.extend(["-vf", "scale=-2:1280,crop=720:1280:0:0"]) 
     else:
-         cmd.extend(["-vf", "scale=1280:-2"]) # Paksa 720p (Lebih ringan)
+         # Mode Landscape (720p)
+         cmd.extend(["-vf", "scale=1280:-2"]) 
 
     cmd.append(output_url)
     
-    start_msg = f"🚀 Starting Lightweight Stream for {video_path}..."
+    start_msg = f"🚀 Starting FIX Stream (YUV420P) for {video_path}..."
     log_callback(start_msg)
-    if session_id: log_to_database(session_id, "INFO", start_msg, video_path)
     
     try:
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        
+        # Baca log baris per baris
         for line in process.stdout:
-            if "frame=" in line or "Error" in line: # Filter log biar gak spam
+            # Filter log biar tidak spam, tapi tampilkan error/frame
+            if "frame=" in line or "Error" in line or "kb/s" in line: 
                 log_callback(line.strip())
-                if session_id: log_to_database(session_id, "FFMPEG", line.strip(), video_path)
+                
         process.wait()
-        log_callback("✅ Streaming completed/stopped")
+        log_callback("✅ Streaming stopped")
+        
     except Exception as e:
         log_callback(f"❌ FFmpeg Error: {e}")
-        if session_id: log_to_database(session_id, "ERROR", str(e), video_path)
     finally:
         log_callback("⏹️ Session ended")
 
